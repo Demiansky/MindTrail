@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bst_postgres_prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - bst_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bst_redis_prod
+    networks:
+      - bst_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  django:
+    build:
+      context: ./services/django
+      dockerfile: Dockerfile.prod
+    container_name: bst_django_prod
+    command: gunicorn backend.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    environment:
+      - DEBUG=False
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - FASTAPI_SERVICE_TOKEN=${FASTAPI_SERVICE_TOKEN}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bst_network
+
+  fastapi:
+    build:
+      context: ./services/fastapi
+      dockerfile: Dockerfile.prod
+    container_name: bst_fastapi_prod
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
+    environment:
+      - DJANGO_BASE_URL=http://django:8000
+      - DJANGO_SERVICE_TOKEN=${FASTAPI_SERVICE_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - AI_PROVIDER=${AI_PROVIDER}
+      - AI_API_KEY=${AI_API_KEY}
+    depends_on:
+      - django
+      - redis
+    networks:
+      - bst_network
+
+  celery:
+    build:
+      context: ./services/django
+      dockerfile: Dockerfile.prod
+    container_name: bst_celery_prod
+    command: celery -A backend worker --loglevel=info
+    environment:
+      - DEBUG=False
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - bst_network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: bst_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/docker/Caddyfile:/etc/caddy/Caddyfile
+      - static_volume:/srv/static
+      - media_volume:/srv/media
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - django
+      - fastapi
+    networks:
+      - bst_network
+
+volumes:
+  postgres_data_prod:
+  static_volume:
+  media_volume:
+  caddy_data:
+  caddy_config:
+
+networks:
+  bst_network:
+    driver: bridge

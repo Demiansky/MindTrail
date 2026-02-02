@@ -1,0 +1,26 @@
+{
+  "domain.example.com": {
+    "handle": [
+      {
+        "handler": "reverse_proxy",
+        "match": [{"path": ["/api/*", "/admin/*"]}],
+        "upstreams": [{"dial": "django:8000"}]
+      },
+      {
+        "handler": "reverse_proxy",
+        "match": [{"path": ["/ai/*"]}],
+        "upstreams": [{"dial": "fastapi:8001"}]
+      },
+      {
+        "handler": "file_server",
+        "root": "/srv/static",
+        "match": [{"path": ["/static/*"]}]
+      },
+      {
+        "handler": "file_server",
+        "root": "/srv/media",
+        "match": [{"path": ["/media/*"]}]
+      }
+    ]
+  }
+}
