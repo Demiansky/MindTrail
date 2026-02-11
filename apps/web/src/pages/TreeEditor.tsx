@@ -1,6 +1,6 @@
 import type { CreateNodeRequest, NodeDTO } from '@studytree/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, clearTokens } from '../api'
 
@@ -15,6 +15,10 @@ export default function TreeEditor({ onLogout }: TreeEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [aiResponse, setAiResponse] = useState<string>('')
   const [isLoadingAI, setIsLoadingAI] = useState(false)
+
+  const [localNotes, setLocalNotes] = useState('');
+
+  // Sync localNotes with selectedNode's user_notes whenever selectedNode changes
 
   const { data: tree } = useQuery({
     queryKey: ['tree', treeId],
@@ -56,6 +60,10 @@ export default function TreeEditor({ onLogout }: TreeEditorProps) {
       queryClient.invalidateQueries({ queryKey: ['tree-nodes', treeId] })
     },
   })
+
+  useEffect(() => {
+    setLocalNotes(selectedNode?.user_notes || '');
+  }, [selectedNode]);
 
   const handleLogout = () => {
     clearTokens()
@@ -170,8 +178,10 @@ export default function TreeEditor({ onLogout }: TreeEditorProps) {
                 <div className="form-group" style={{ marginTop: '1rem' }}>
                   <label>Your Notes</label>
                   <textarea
-                    value={selectedNode.user_notes}
-                    onChange={(e) => handleUpdateNotes(e.target.value)}
+                    value={localNotes}
+                    onChange={e => setLocalNotes(e.target.value)}
+                    onBlur={() => handleUpdateNotes(localNotes)}
+                   // onChange={(e) => handleUpdateNotes(e.target.value)}
                     placeholder="Write your notes here..."
                   />
                 </div>

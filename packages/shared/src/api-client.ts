@@ -105,12 +105,20 @@ export class APIClient {
       throw new Error('No refresh token available');
     }
 
-    const response = await this.api.post<AuthTokens>('/api/auth/refresh/', {
-      refresh: this.refreshToken,
-    });
+    try {
+      // Use a separate axios instance to prevent interceptor from catching this
+      const response = await axios.post<AuthTokens>(
+        `${this.baseURL}/api/auth/refresh/`,
+        { refresh: this.refreshToken }
+      );
 
-    this.accessToken = response.data.access;
-    return response.data;
+      this.setTokens(response.data);  // Save both new access AND refresh tokens
+      return response.data;
+    } catch (error) {
+      // If refresh fails, clear tokens and stop retrying
+      this.clearTokens();
+      throw error;
+    }
   }
 
   async getCurrentUser(): Promise<UserDTO> {

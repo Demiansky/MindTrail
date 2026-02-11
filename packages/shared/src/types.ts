@@ -65,7 +65,7 @@ export interface NodeDTO {
   sibling_order: number;
   created_by: number;
   created_by_username: string;
-  children: number[] | NodeDTO[]; // Can be IDs or nested
+  children: NodeDTO[];
   created_at: string;
   updated_at: string;
 }
